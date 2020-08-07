@@ -118,20 +118,33 @@ def on_button_click(event, x, y, flags, param):
         vis.on_button_click(x, y)
 
 
+def on_trackbar(val):
+    global vis
+    vis.on_trackbar(val)
+
+
 if __name__ == '__main__':
     args = parse_args()
 
     dataset = read_folder(args.folder)
-    vis = VIS(dataset)
+    json_path = os.path.join(args.folder, os.path.basename(args.folder) + '.json')
+    vis = VIS(dataset, json_path)
 
     # init cv2 window and functions
     window_grid = "all_data"
     window_video = "full_video"
     window_button = "button"
 
-    cv2.namedWindow(window_grid)
     cv2.namedWindow(window_video)
-    cv2.namedWindow(window_button)
+    cv2.moveWindow(window_video, 1000, 0)
+
+    cv2.namedWindow(window_button, cv2.WINDOW_AUTOSIZE)
+    cv2.moveWindow(window_button, 0, 0)
+
+    cv2.namedWindow(window_grid, cv2.WINDOW_AUTOSIZE)
+    cv2.resizeWindow(window_grid, vis.win_width, vis.win_height)
+    cv2.moveWindow(window_grid, 400, 0)
+    cv2.createTrackbar('Scroll bar', window_grid, 0, 100, on_trackbar)
 
     cv2.setMouseCallback(window_grid, on_grid_click)
     cv2.setMouseCallback(window_button, on_button_click)
@@ -147,3 +160,5 @@ if __name__ == '__main__':
         if key == ord("q"):
             cv2.destroyAllWindows()
             exit(0)
+        elif key == ord(" "):
+            pass

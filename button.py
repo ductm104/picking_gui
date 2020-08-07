@@ -8,8 +8,8 @@ def on_mouse(event, x, y, flags, param):
 
 
 class Button:
-    values = ['None', '2C', '3C', '4C', 'PTS_S', 'PTS_L']
-    mapping = {'None':0, '2C':1, '3C':2, '4C':3, 'PTS_S':4, 'PTS_L':4}
+    values = ['NONE', '2C', '3C', '4C', 'PTS_S', 'PTS_L']
+    mapping = {'NONE':0, '2C':1, '3C':2, '4C':3, 'PTS_S':4, 'PTS_L':4}
     def __init__(self):
         self.state = None
         self.width = 128
@@ -53,7 +53,7 @@ class Button:
         cv2.putText(self.image, label, (xm, ym),
                     self.font, 1.0, (255, 255, 0), 2)
 
-    def on_change(self, label='None'):
+    def on_change(self, label='NONE'):
         label = label.upper()
         if label in self.values:
             row = self.mapping[label]
@@ -66,8 +66,7 @@ class Button:
         yy = y // self.height
         self.__update(yy)
         self.value = self.values[yy]
-        print(self.value)
-
+        print('CHAMBER UPDATED:', self.value)
         return self.value
 
     def get_ui(self):
