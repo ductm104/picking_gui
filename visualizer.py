@@ -21,11 +21,11 @@ class VIS:
         self.trackval = 0
 
         self.block_size = 150
+        self.ncols = 4
         self.nrows = 5
         self.margin = 3
         self.win_height = self.nrows * (self.block_size+self.margin)
-        self.win_width = 4 * (self.block_size+self.margin)
-        self.max_width = 450
+        self.max_width = self.ncols * (self.block_size+self.margin)
 
         self.button = Button()
         self.__init_thumbnails()
@@ -39,8 +39,7 @@ class VIS:
 
         with open(self.json_path, 'w') as f:
             json.dump(data, f)
-
-        #print("Json updated")
+        # print("Json updated")
 
     def __init_thumbnails(self):
         self.thumbnails = np.array([get_thumbnail(img) \
@@ -65,7 +64,7 @@ class VIS:
                 img = imgs[i_block]
                 label = labels[i_block]
                 img = cv2.resize(img, (block_size, block_size))
-                img = cv2.putText(img, f'{self.imgs_data[i_block].shape[0]}|{label}', (0, 30),
+                img = cv2.putText(img, f'{self.imgs_data[i_block].shape[0]}-{label}', (0, 30),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 225, 0), 2)
 
                 # calc image position
@@ -75,6 +74,7 @@ class VIS:
 
         self.img_matrix = img_matrix
         self.grid = img_matrix
+        self.win_width = img_matrix.shape[1]
 
     def on_trackbar(self, val):
         self.trackval = val
@@ -87,6 +87,7 @@ class VIS:
             self.__update_all_video()
 
         offset = min(int(self.trackval/100*self.win_width), self.win_width-self.max_width)
+        offset = max(offset, 0)
         grid = self.grid[:, offset:offset+self.max_width]
         return grid, self.full_video, self.button.get_ui()
 
@@ -94,10 +95,12 @@ class VIS:
         if self.is_video_running:
             value = self.button.on_mouse(x, y)
             self.labels[self.video_index] = value
+            self.__init_grid(self.thumbnails, self.labels)
             self.__save_json()
 
     def on_grid_click(self, x, y):
         offset = min(int(self.trackval/100*self.win_width), self.win_width-self.max_width)
+        offset = max(offset, 0)
         x_i = (offset+x) // (self.block_size + self.margin)  # col
         y_i = y // (self.block_size + self.margin)  # row
         n_i = y_i + x_i*self.nrows
@@ -125,8 +128,8 @@ class VIS:
                       (0, 255, 0), thickness=self.margin)
 
     def __update(self, col, row, i_block):
-        self.__draw_rectangle(row, col)
         self.__run_video(row, col, i_block)
+        self.__draw_rectangle(row, col)
         self.button.on_change(self.labels[i_block])
 
     def __run_video(self, row, col, i_block):

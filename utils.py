@@ -15,6 +15,9 @@ from visualizer import *
 from button import Button
 
 
+counter = Value('i', 0)
+
+
 def convert_images(images):
     # convert to N*H*W*3
     if len(images.shape) == 2:
@@ -39,8 +42,8 @@ def get_thumbnail(images):
     return images[-1, ...]
 
 
-def read_json(folder_path):
-    json_path = os.path.join(folder_path, os.path.basename(folder_path) + '.json')
+def read_json(json_path):
+    #json_path = os.path.join(folder_path, os.path.basename(folder_path) + '.json')
 
     try:
         with open(json_path, 'r') as file:
@@ -51,7 +54,6 @@ def read_json(folder_path):
     return label
 
 
-counter = Value('i', 0)
 def read_dicom(file_path):
     try:
         dataset = pydicom.dcmread(file_path)
@@ -74,24 +76,45 @@ def read_dicom(file_path):
     return file_path, imgs
 
 
-def read_folder(folder_path, num_thread=8):
+def read_folder(folder_path, json_path, num_thread=8):
     folder_path = os.path.abspath(folder_path)
     file_paths = glob.glob(os.path.join(folder_path, '*'))
-    print(f'READING {len(file_paths)} FILES FROM "{folder_path}]"')
+    print(f'READING {len(file_paths)} FILES FROM "{folder_path}"')
 
     with ThreadPoolExecutor(num_thread) as pool:
         data = list(pool.map(read_dicom, file_paths))
 
-    label_data = read_json(folder_path)
+    label_data = read_json(json_path)
     file_paths, imgs_data, labels = [], [], []
+    file_paths_none, imgs_data_none, labels_none = [], [], []
 
+    count = 0
     for item in data:
         if item[0] is not None:
-            file_paths.append(item[0])
-            imgs_data.append(item[1])
-            labels.append(label_data[item[0]])
+            try:
+                label_ = label_data[item[0]]
+            except:
+                count += 1
+                label_ = 'NO_LABEL'
 
+            if label_.upper() == 'NONE':
+                file_paths_none.append(item[0])
+                imgs_data_none.append(item[1])
+                labels_none.append(label_)
+            elif label_.upper() == 'NO_LABEL':
+                file_paths.insert(0, item[0])
+                imgs_data.insert(0, item[1])
+                labels.insert(0, label_)
+            else:
+                file_paths.append(item[0])
+                imgs_data.append(item[1])
+                labels.append(label_)
+
+    file_paths = file_paths + file_paths_none
+    imgs_data = imgs_data + imgs_data_none
+    labels = labels + labels_none
     print("NUM DICOMs: ", len(file_paths))
+    print(f"NO_LABEL: {count} files")
 
     return {'file_paths': file_paths,
             'imgs_data': imgs_data,
@@ -100,7 +123,11 @@ def read_folder(folder_path, num_thread=8):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--folder", type=str,
+    parser.add_argument("--root", type=str,
+        help="path to dicom folder")
+    parser.add_argument("--json", type=str,
+        help="path to dicom folder")
+    parser.add_argument("--checklist", type=str,
         help="path to dicom folder")
     args = parser.parse_args()
     return args
@@ -123,42 +150,94 @@ def on_trackbar(val):
     vis.on_trackbar(val)
 
 
+def pick_a_folder(root, checklist_path):
+    paths = glob.glob(os.path.join(root, "*"))
+    paths = [os.path.abspath(path) for path in paths if os.path.isdir(path)]
+
+    try:
+        with open(checklist_path, 'r') as f:
+            data = json.load(f)
+            check_list = data.keys()
+    except:
+        check_list = []
+
+    for path in paths:
+        if path not in check_list:
+            return path
+
+    return None
+
+
+def save_check_list(checklist_path, folder, key):
+    values = {'n': 'DONE', 'l': 'LATER'}
+    try:
+        with open(checklist_path, 'r') as f:
+            data = json.load(f)
+    except:
+        data = {}
+
+    data[folder] = values[chr(key)]
+
+    with open(checklist_path, 'w') as f:
+        json.dump(data, f)
+
+    print(f"MARK {folder} AS {values[chr(key)]}\n")
+
+
 if __name__ == '__main__':
     args = parse_args()
 
-    dataset = read_folder(args.folder)
-    json_path = os.path.join(args.folder, os.path.basename(args.folder) + '.json')
-    vis = VIS(dataset, json_path)
-
-    # init cv2 window and functions
-    window_grid = "all_data"
-    window_video = "full_video"
-    window_button = "button"
-
-    cv2.namedWindow(window_video)
-    cv2.moveWindow(window_video, 1000, 0)
-
-    cv2.namedWindow(window_button, cv2.WINDOW_AUTOSIZE)
-    cv2.moveWindow(window_button, 0, 0)
-
-    cv2.namedWindow(window_grid, cv2.WINDOW_AUTOSIZE)
-    cv2.resizeWindow(window_grid, vis.win_width, vis.win_height)
-    cv2.moveWindow(window_grid, 400, 0)
-    cv2.createTrackbar('Scroll bar', window_grid, 0, 100, on_trackbar)
-
-    cv2.setMouseCallback(window_grid, on_grid_click)
-    cv2.setMouseCallback(window_button, on_button_click)
-
     while True:
-        grid, full_video, img_button = vis.get_ui()
-
-        cv2.imshow(window_grid, grid)
-        cv2.imshow(window_video, full_video)
-        cv2.imshow(window_button, img_button)
-
-        key = cv2.waitKey(30)
-        if key == ord("q"):
-            cv2.destroyAllWindows()
+        print('\n\n')
+        folder = pick_a_folder(args.root, args.checklist)
+        if folder is None:
+            print("DONE")
             exit(0)
-        elif key == ord(" "):
-            pass
+
+        # check if local-json exits otherwise use global-json
+        json_path = os.path.join(folder, os.path.basename(folder) + '.json')
+        if not os.path.isfile(json_path):
+            json_data = args.json
+            print(f'CAN NOT FILE JSON FOR {folder}, READ FROM {json_data}')
+        else:
+            json_data = json_path
+
+        # init visualizer
+        dataset = read_folder(folder, json_data)
+        vis = VIS(dataset, json_path)
+        counter = Value('i', 0)
+
+        # init cv2 window and functions
+        window_grid = os.path.basename(folder)
+        window_video = "full_video"
+        window_button = "button"
+
+        cv2.namedWindow(window_video)
+        cv2.moveWindow(window_video, 1100, 0)
+
+        cv2.namedWindow(window_button, cv2.WINDOW_AUTOSIZE)
+        cv2.moveWindow(window_button, 0, 0)
+
+        cv2.namedWindow(window_grid, cv2.WINDOW_AUTOSIZE)
+        cv2.resizeWindow(window_grid, vis.win_width, vis.win_height)
+        cv2.moveWindow(window_grid, 400, 0)
+        cv2.createTrackbar('Scroll bar', window_grid, 0, 100, on_trackbar)
+
+        cv2.setMouseCallback(window_grid, on_grid_click)
+        cv2.setMouseCallback(window_button, on_button_click)
+
+        while True:
+            grid, full_video, img_button = vis.get_ui()
+
+            cv2.imshow(window_grid, grid)
+            cv2.imshow(window_video, full_video)
+            cv2.imshow(window_button, img_button)
+
+            key = cv2.waitKey(30)
+            if key == ord("q"):
+                cv2.destroyAllWindows()
+                exit(0)
+            elif key == ord("n") or key == ord("l"):
+                cv2.destroyAllWindows()
+                save_check_list(args.checklist, folder, key)
+                break
