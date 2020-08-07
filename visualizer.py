@@ -5,6 +5,7 @@ import math
 import numpy as np
 
 from utils import *
+from button import Button
 
 
 class VIS:
@@ -19,10 +20,10 @@ class VIS:
         self.nrows = 5
         self.margin = 3
 
-        self.is_video_running = False
-
+        self.button = Button()
         self.__init_thumbnails()
         self.__init_grid(self.thumbnails, self.labels)
+        self.__reset()
 
     def __init_thumbnails(self):
         self.thumbnails = np.array([get_thumbnail(img) \
@@ -58,12 +59,17 @@ class VIS:
         self.img_matrix = img_matrix
         self.grid = img_matrix
 
-    def get_grid(self):
+    def get_ui(self):
         if self.is_video_running:
             self.__update_video()
-        return self.grid
+        return self.grid, self.full_video, self.button.get_ui()
 
-    def on_mouse(self, x, y):
+    def on_button_click(self, x, y):
+        if self.is_video_running:
+            value = self.button.on_mouse(x, y)
+            self.labels[self.video_index] = value
+
+    def on_grid_click(self, x, y):
         x_i = x // (self.block_size + self.margin)  # col
         y_i = y // (self.block_size + self.margin)  # row
         n_i = y_i + x_i*self.nrows
@@ -72,10 +78,14 @@ class VIS:
             self.__update(x_i, y_i, n_i)
         else:
             self.__reset()
+            print("NONE")
 
     def __reset(self):
+        self.button.reset()
         self.grid = self.img_matrix.copy()
         self.is_video_running = False
+        self.full_video = np.zeros((512, 512, 3), dtype=np.uint8)
+        cv2.putText(self.full_video, "HELLO!!!", (200, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 1)
 
     def __draw_rectangle(self, row, col):
         stride = self.block_size + self.margin
@@ -89,12 +99,13 @@ class VIS:
     def __update(self, col, row, i_block):
         self.__draw_rectangle(row, col)
         self.__run_video(row, col, i_block)
+        self.button.on_change(self.labels[i_block])
 
     def __run_video(self, row, col, i_block):
         # run whole video
         self.is_video_running = True
         self.video_index = i_block
-        self.frame_index = -1 
+        self.frame_index = -1
         self.video_row = row
         self.video_col = col
 
@@ -106,12 +117,15 @@ class VIS:
             self.frame_index = 0
 
         grid = self.grid.copy()
-        frame = self.imgs_data[self.video_index][self.frame_index]
+        frame = self.imgs_data[self.video_index][self.frame_index].copy()
+        self.full_video = frame
         frame = self.__pre_process(frame)
+
         stride = self.block_size + self.margin
         x, y = self.video_col*stride, self.video_row*stride
         grid[y:y+self.block_size, x:x+self.block_size] = frame
         self.grid = grid
+
 
     def __pre_process(self, frame):
         frame = cv2.resize(frame, (self.block_size, self.block_size))

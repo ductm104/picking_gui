@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from multiprocessing.pool import ThreadPool
 from multiprocessing import Value
 from visualizer import *
+from button import Button
 
 
 def convert_images(images):
@@ -45,7 +46,7 @@ def read_json(folder_path):
         with open(json_path, 'r') as file:
             label = json.load(file)
     except:
-        raise Error("JSON not found!")
+        raise error("JSON not found!")
 
     return label
 
@@ -105,10 +106,16 @@ def parse_args():
     return args
 
 
-def onDoubleClick(event, x, y, flags, param):
+def on_grid_click(event, x, y, flags, param):
     global vis
     if event == cv2.EVENT_LBUTTONDBLCLK:
-        vis.on_mouse(x, y)
+        vis.on_grid_click(x, y)
+
+
+def on_button_click(event, x, y, flags, param):
+    global vis
+    if event == cv2.EVENT_LBUTTONDBLCLK:
+        vis.on_button_click(x, y)
 
 
 if __name__ == '__main__':
@@ -118,15 +125,25 @@ if __name__ == '__main__':
     vis = VIS(dataset)
 
     # init cv2 window and functions
-    exit(0)
-    window_name = "blablo"
-    cv2.namedWindow(window_name)
-    cv2.setMouseCallback(window_name, onDoubleClick, vis)
-    while True:
-        imgs = vis.get_grid()
-        cv2.imshow(window_name, imgs)
-        key = cv2.waitKey(30)
+    window_grid = "all_data"
+    window_video = "full_video"
+    window_button = "button"
 
+    cv2.namedWindow(window_grid)
+    cv2.namedWindow(window_video)
+    cv2.namedWindow(window_button)
+
+    cv2.setMouseCallback(window_grid, on_grid_click)
+    cv2.setMouseCallback(window_button, on_button_click)
+
+    while True:
+        grid, full_video, img_button = vis.get_ui()
+
+        cv2.imshow(window_grid, grid)
+        cv2.imshow(window_video, full_video)
+        cv2.imshow(window_button, img_button)
+
+        key = cv2.waitKey(30)
         if key == ord("q"):
             cv2.destroyAllWindows()
             exit(0)
