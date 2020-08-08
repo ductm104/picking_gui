@@ -10,12 +10,13 @@ from button import Button
 
 
 class VIS:
-    def __init__(self, dataset, json_path):
+    def __init__(self, dataset, json_path, json_root):
         self.dataset = dataset
         self.imgs_data = dataset['imgs_data']
         self.labels = dataset['labels']
         self.file_paths = dataset['file_paths']
         self.n_files = len(self.file_paths)
+        self.json_root = json_root
         self.json_path = json_path
         self.is_play_all = False
         self.trackval = 0
@@ -39,7 +40,22 @@ class VIS:
 
         with open(self.json_path, 'w') as f:
             json.dump(data, f)
-        # print("Json updated")
+
+        self.__update_json_root()
+
+    def __update_json_root(self):
+        try:
+            with open(self.json_root, 'r') as f:
+                data = json.load(f)
+        except:
+            data = {}
+        for path, label in zip(self.file_paths, self.labels):
+            data[path] = label
+
+        with open(self.json_root, 'w') as f:
+            json.dump(data, f)
+
+        print('JSON ROOT UPDATED')
 
     def __init_thumbnails(self):
         self.thumbnails = np.array([get_thumbnail(img) \

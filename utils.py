@@ -135,13 +135,13 @@ def parse_args():
 
 def on_grid_click(event, x, y, flags, param):
     global vis
-    if event == cv2.EVENT_LBUTTONDBLCLK:
+    if event == cv2.EVENT_LBUTTONDOWN:
         vis.on_grid_click(x, y)
 
 
 def on_button_click(event, x, y, flags, param):
     global vis
-    if event == cv2.EVENT_LBUTTONDBLCLK:
+    if event == cv2.EVENT_LBUTTONDOWN:
         vis.on_button_click(x, y)
 
 
@@ -169,7 +169,9 @@ def pick_a_folder(root, checklist_path):
 
 
 def save_check_list(checklist_path, folder, key):
-    values = {'n': 'DONE', 'l': 'LATER'}
+    # values = {'n': 'DONE', 'l': 'LATER'}
+    values = {'n': 'normal', 'y': 'yes', 'b': 'LBBB', 'o': 'ag', 'l': 'later', 'x': 'DONE'}
+
     try:
         with open(checklist_path, 'r') as f:
             data = json.load(f)
@@ -197,14 +199,17 @@ if __name__ == '__main__':
         # check if local-json exits otherwise use global-json
         json_path = os.path.join(folder, os.path.basename(folder) + '.json')
         if not os.path.isfile(json_path):
-            json_data = args.json
-            print(f'CAN NOT FILE JSON FOR {folder}, READ FROM {json_data}')
+            if not os.path.isfile(args.json):
+                print(f'CAN NOT FIND JSON from {args.json}')
+            else:
+                json_data = args.json
+                print(f'CAN NOT FIND JSON FOR {folder}, READ FROM {json_data}')
         else:
             json_data = json_path
 
         # init visualizer
         dataset = read_folder(folder, json_data)
-        vis = VIS(dataset, json_path)
+        vis = VIS(dataset, json_path, args.json)
         counter = Value('i', 0)
 
         # init cv2 window and functions
@@ -226,6 +231,12 @@ if __name__ == '__main__':
         cv2.setMouseCallback(window_grid, on_grid_click)
         cv2.setMouseCallback(window_button, on_button_click)
 
+        list_keys = [ord(k) for k in ['n', 'l', 'y', 'o', 'b', 'x']]
+
+    # values = {'n': 'normal', 'y': 'yes', 'b': 'LBBB', 'o': 'ag', 'l': 'later'}
+
+        # map_keys = {'n': 'next', 'l': 'later', 'b' : 'bad', 'v': 'vinif', 'k': 'kc', 'o': 'other'}
+        
         while True:
             grid, full_video, img_button = vis.get_ui()
 
@@ -237,7 +248,7 @@ if __name__ == '__main__':
             if key == ord("q"):
                 cv2.destroyAllWindows()
                 exit(0)
-            elif key == ord("n") or key == ord("l"):
+            elif key in list_keys:
                 cv2.destroyAllWindows()
                 save_check_list(args.checklist, folder, key)
                 break
