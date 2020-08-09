@@ -1,0 +1,7 @@
+python utils.py --root /media/tuan/Data1/DATA_FOR_DUCTM/data --json /media/tuan/Data1/DATA_FOR_DUCTM/bve_results.json --checklist /media/tuan/Data1/DATA_FOR_DUCTM/check_list_duc_data.json --json_mod = 
+
+
+
+python fix_json.py /media/tuan/Data1/Handle_chamber/chamber_modify/bvhnvx_20200807_v1.json
+
+python utils.py --root /media/tuan/Data1/DATA_RAW/BVHNVX_SIUID --json /media/tuan/Data1/Handle_chamber/chamber_modify/bvhnvx_20200807_v1.json.json --checklist /media/tuan/Data1/Handle_chamber/chamber_modify/check_listbvhnvx_20200807_v1.json

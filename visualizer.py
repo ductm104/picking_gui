@@ -10,16 +10,20 @@ from button import Button
 
 
 class VIS:
-    def __init__(self, dataset, json_path, json_root):
-        self.dataset = dataset
-        self.imgs_data = dataset['imgs_data']
-        self.labels = dataset['labels']
-        self.file_paths = dataset['file_paths']
+    def __init__(self, folder_path, json_root, folder_label):
+        self.folder_label = folder_label
+
+        json_data, json_local_path = get_json_path(folder_path, json_root)
+        self.dataset = read_folder(folder_path, json_data)
+
+        self.imgs_data = self.dataset['imgs_data']
+        self.labels = self.dataset['labels']
+        self.file_paths = self.dataset['file_paths']
+
         self.n_files = len(self.file_paths)
         self.json_root = json_root
-        self.json_path = json_path
-        self.is_play_all = False
-        self.trackval = 0
+        self.json_path = json_local_path
+        self.offset = 0
 
         self.block_size = 150
         self.ncols = 4
@@ -30,11 +34,16 @@ class VIS:
 
         self.button = Button()
         self.__init_thumbnails()
-        self.__init_grid(self.thumbnails, self.labels)
+        self.__init_grid()
         self.__reset()
 
-    def __save_json(self):
-        data = {}
+    def __update_json_local(self):
+        try:
+            with open(self.json_path, 'r') as f:
+                data = json.load(f)
+        except:
+            data = {}
+
         for path, label in zip(self.file_paths, self.labels):
             data[path] = label
 
@@ -49,19 +58,27 @@ class VIS:
                 data = json.load(f)
         except:
             data = {}
+
         for path, label in zip(self.file_paths, self.labels):
             data[path] = label
 
         with open(self.json_root, 'w') as f:
             json.dump(data, f)
+        #print('JSON ROOT UPDATED')
 
-        print('JSON ROOT UPDATED')
+    def __get_thumbnail(self, images):
+        if images.shape[0] > 10:
+            return images[10, ...]
+        return images[-1, ...]
 
     def __init_thumbnails(self):
-        self.thumbnails = np.array([get_thumbnail(img) \
+        self.thumbnails = np.array([self.__get_thumbnail(img) \
             for img in self.dataset['imgs_data']])
 
-    def __init_grid(self, imgs, labels, nrows=5, block_size=150, margin=3):
+    def __init_grid(self):
+        nrows, block_size, margin = self.nrows, self.block_size, self.margin
+        imgs, labels = self.thumbnails, self.labels
+
         ncols = math.ceil(len(imgs) / nrows)
         n_blocks = ncols * nrows
 
@@ -80,8 +97,8 @@ class VIS:
                 img = imgs[i_block]
                 label = labels[i_block]
                 img = cv2.resize(img, (block_size, block_size))
-                img = cv2.putText(img, f'{self.imgs_data[i_block].shape[0]}-{label}', (0, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 225, 0), 2)
+                img = cv2.putText(img, f'{self.imgs_data[i_block].shape[0]}-{label}', (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (37, 200, 37), 2)
 
                 # calc image position
                 x = col * (block_size + margin)
@@ -89,35 +106,29 @@ class VIS:
                 img_matrix[y:y+block_size, x:x+block_size] = img
 
         self.img_matrix = img_matrix
-        self.grid = img_matrix
+        self.grid = img_matrix.copy()
         self.win_width = img_matrix.shape[1]
 
     def on_trackbar(self, val):
-        self.trackval = val
+        self.offset = min(int(val/100*self.win_width), self.win_width-self.max_width)
+        self.offset = max(self.offset, 0)
 
     def get_ui(self):
         if self.is_video_running:
             self.__update_video()
 
-        if self.is_play_all:
-            self.__update_all_video()
-
-        offset = min(int(self.trackval/100*self.win_width), self.win_width-self.max_width)
-        offset = max(offset, 0)
-        grid = self.grid[:, offset:offset+self.max_width]
+        grid = self.grid[:, self.offset:self.offset+self.max_width]
         return grid, self.full_video, self.button.get_ui()
 
     def on_button_click(self, x, y):
         if self.is_video_running:
             value = self.button.on_mouse(x, y)
             self.labels[self.video_index] = value
-            self.__init_grid(self.thumbnails, self.labels)
-            self.__save_json()
+            self.__init_grid()
+            self.__update_json_local()
 
     def on_grid_click(self, x, y):
-        offset = min(int(self.trackval/100*self.win_width), self.win_width-self.max_width)
-        offset = max(offset, 0)
-        x_i = (offset+x) // (self.block_size + self.margin)  # col
+        x_i = (self.offset+x) // (self.block_size + self.margin)  # col
         y_i = y // (self.block_size + self.margin)  # row
         n_i = y_i + x_i*self.nrows
         if n_i < self.n_files:
@@ -127,12 +138,16 @@ class VIS:
             self.__reset()
             print("SELECT NONE")
 
+    def update_label(self, label):
+        self.folder_label = label
+        print('FOLDER DIAGNOSIS:', self.folder_label)
+
     def __reset(self):
         self.button.reset()
         self.grid = self.img_matrix.copy()
         self.is_video_running = False
         self.full_video = np.zeros((512, 512, 3), dtype=np.uint8)
-        cv2.putText(self.full_video, "HELLO!!!", (200, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 1)
+        cv2.putText(self.full_video, self.folder_label, (200, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 1)
 
     def __draw_rectangle(self, row, col):
         stride = self.block_size + self.margin
@@ -163,48 +178,27 @@ class VIS:
         if self.frame_index >= self.imgs_data[self.video_index].shape[0]:
             self.frame_index = 0
 
-        grid = self.grid.copy()
-        frame = self.imgs_data[self.video_index][self.frame_index].copy()
-        self.full_video = frame
-        frame = self.__pre_process(frame)
+        frame = self.imgs_data[self.video_index][self.frame_index]
+        self.full_video = self.__pre_process_frame(frame.copy())
+        frame = self.__pre_process(frame.copy())
 
         stride = self.block_size + self.margin
         x, y = self.video_col*stride, self.video_row*stride
-        grid[y:y+self.block_size, x:x+self.block_size] = frame
-        self.grid = grid
+        self.grid[y:y+self.block_size, x:x+self.block_size] = frame
 
-    def __update_all_video(self):
-        for i in range(len(self.play_list)):
-            i_video = self.play_list[i][0]
-            if self.play_list[i][1] == self.imgs_data[i_video].shape[0]-1:
-                self.play_list[i][1] = -1
-            self.play_list[i][1] += 1
-            i_frame = self.play_list[i][1]
+    def __pre_process_frame(self, full_frame):
+        cv2.putText(full_frame, self.folder_label, (100, 100),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1,
+                    (0, 0, 200), 3)
+        return full_frame
 
     def __pre_process(self, frame):
         frame = cv2.resize(frame, (self.block_size, self.block_size))
         label = self.labels[self.video_index]
-        cv2.putText(frame, label, (0, 30),
+        cv2.putText(frame, label, (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7,
-                    (0, 0, 255), 2)
+                    (0, 0, 200), 2)
         return frame
-
-    def __play_all(self):
-        for i in range(len(self.imgs_data)):
-            col = i // self.nrows
-            row = i % self.nrows
-            print(row, col)
-
-    def __pause_all(self):
-        self.__reset()
-
-    def play_pause(self):
-        if self.is_play_all:
-            self.__pause_all()
-            self.is_play_all = False
-        else:
-            self.__play_all()
-            self.is_play_all = True
 
 
 if __name__ == '__main__':
