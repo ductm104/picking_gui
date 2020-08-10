@@ -8,6 +8,8 @@ import cv2
 import pydicom
 import json
 
+import multiprocessing as mp
+
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing.pool import ThreadPool
 from multiprocessing import Value
@@ -80,6 +82,7 @@ def read_folder(folder_path, json_path, num_thread=8):
 
     global counter
     counter = Value('i', 0)
+    #with mp.Pool(num_thread) as pool:
     with ThreadPoolExecutor(num_thread) as pool:
         data = list(pool.map(read_dicom, file_paths))
 

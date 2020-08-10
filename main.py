@@ -1,4 +1,5 @@
 import os
+import re
 import glob
 import argparse
 import numpy as np
@@ -16,14 +17,21 @@ list_keys = [ord(k) for k in ['n', 'l', 'y', 'o', 'b', 'p']]
 key_maps = {'n': 'normal', 'y': 'yes', 'b': 'LBBB', 'o': 'ag', 'l': 'later', 'p': 'postsystolic'}
 
 
-def save_check_list(checklist_path, folder, key):
+def save_check_list(checklist_path, dr_name, folder, key, remove_last=False):
     try:
         with open(checklist_path, 'r') as f:
             data = json.load(f)
     except:
         data = {}
+    try:
+        folder_label_list = data[folder]
+        if remove_last:
+            folder_label_list.pop()
+    except:
+        folder_label_list = []
 
-    data[folder] = key_maps[chr(key)]
+    folder_label_list.append([dr_name, key_maps[chr(key)]])
+    data[folder] = folder_label_list
     with open(checklist_path, 'w') as f:
         json.dump(data, f)
 
@@ -34,10 +42,10 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=str,
         help="path to dicom folder")
-    parser.add_argument("--json", type=str,
-        help="path to dicom folder")
+    parser.add_argument("--json_chamber", type=str,
+        help="path to json chamber")
     parser.add_argument("--checklist", type=str,
-        help="path to dicom folder")
+        help="path to check list")
     args = parser.parse_args()
     return args
 
@@ -61,7 +69,7 @@ def on_trackbar(val):
 
 def check_case(path, case_data):
     ok_list = ['vinif', 'kc']
-    return True, 'kc' # TODO delete this line
+    return True, 'kc' # TODO del this line
     try:
         folder_name = path.split('/')[-1]
         oke = case_data[folder_name] in ok_list
@@ -98,7 +106,7 @@ def get_list_folder(root, checklist_path):
                 label = checklist_data[path]
                 folder_list.append((path, case_value, label))
             except:
-                folder_list.insert(0, (path, case_value, ''))
+                folder_list.insert(0, (path, case_value, []))
 
     return np.array(folder_list)
 
@@ -106,6 +114,7 @@ def get_list_folder(root, checklist_path):
 def check_global_json(json_path, name=''):
     if os.path.isfile(json_path):
         print(f"FOUND {name} JSON FROM {json_path}")
+        os.system(f'cp {json_path} {json_path}.swp')
     else:
         print(f"CAN NOT FIND {name} JSON FROM {json_path}")
         print(f"CREATE NEW EMPTY {name} JSON\n")
@@ -113,10 +122,26 @@ def check_global_json(json_path, name=''):
             json.dump({}, f)
 
 
+def get_dr_name():
+    os.system("clear")
+    print("*"*40)
+    print("INPUT DOCTOR's NAME")
+    while True:
+        name = input()
+        if re.match("^[a-zA-Z]*$", name):
+            break
+        else:
+            print("Doctor's name must contain only '[a-z][A-Z]'")
+    print("*"*40)
+
+    return name
+
+
 if __name__ == '__main__':
+    dr_name = get_dr_name()
     args = parse_args()
 
-    check_global_json(args.json, 'GLOBAL')
+    check_global_json(args.json_chamber, 'GLOBAL')
     check_global_json(args.checklist, 'CHECK_LIST')
 
     folder_list = get_list_folder(args.root, args.checklist)
@@ -124,19 +149,25 @@ if __name__ == '__main__':
     if len(folder_list) == 0: exit(0)
 
     folder_idx = -1
+    track_list = {}
+    for i in range(len(folder_list)):
+        track_list[i] = False
     while True:
-        #os.system('clear')
-
         folder_idx = (folder_idx + 1) % len(folder_list)
-        folder_path, case_value, folder_label = folder_list[folder_idx]
+        folder_path, case_value, folder_label_list_tmp = folder_list[folder_idx]
 
         print('*'*20, case_value, '*'*20)
 
-        vis = VIS(folder_path, args.json, folder_label)
+        cur_label = None
+        folder_label_list = folder_label_list_tmp.copy()
+        if track_list[folder_idx]:
+            cur_label = folder_label_list.pop()[1]
+
+        vis = VIS(dr_name, folder_path, args.json_chamber, folder_label_list, cur_label)
 
         # init cv2 window and functions
         window_grid = os.path.basename(folder_path)
-        window_video = "full_video"
+        window_video = f"CASE-[{case_value.upper()}]-[{folder_idx+1}]/[{len(folder_list)}]"
         window_button = "button"
 
         # init button
@@ -147,14 +178,12 @@ if __name__ == '__main__':
         cv2.namedWindow(window_grid, cv2.WINDOW_AUTOSIZE)
         cv2.resizeWindow(window_grid, vis.win_width, vis.win_height)
         cv2.moveWindow(window_grid, 400, 0)
-        cv2.createTrackbar('Scroll bar', window_grid, 0, 100, on_trackbar) 
-        # init full video
+        cv2.createTrackbar('Scroll bar', window_grid, 0, 100, on_trackbar) # init full video
         cv2.namedWindow(window_video)
         cv2.moveWindow(window_video, 1100, 0)
 
         cv2.setMouseCallback(window_grid, on_grid_click)
         cv2.setMouseCallback(window_button, on_button_click)
-
 
         while True:
             grid, full_video, img_button = vis.get_ui()
@@ -163,17 +192,19 @@ if __name__ == '__main__':
             cv2.imshow(window_grid, grid)
             cv2.imshow(window_video, full_video)
 
-            key = cv2.waitKey(60)
+            key = cv2.waitKey(30)
             if key == ord("q"):
                 cv2.destroyAllWindows()
                 exit(0)
             elif key in list_keys:
-                folder_list[folder_idx][2] = key_maps[chr(key)]
                 vis.update_label(key_maps[chr(key)])
-                save_check_list(args.checklist, folder_path, key)
+                save_check_list(args.checklist, dr_name, folder_path,
+                                key, track_list[folder_idx])
+                folder_list[folder_idx][2] = read_check_list(args.checklist)[folder_path]
+                track_list[folder_idx] = True
             elif key == ord('u'):
                 # undo
-                folder_idx -= 1
+                folder_idx -= 2
                 cv2.destroyAllWindows()
                 break
             elif key == ord('x'):

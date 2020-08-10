@@ -10,8 +10,10 @@ from button import Button
 
 
 class VIS:
-    def __init__(self, folder_path, json_root, folder_label):
-        self.folder_label = folder_label
+    def __init__(self, dr_name, folder_path, json_root, folder_label_list, cur_label=None):
+        self.folder_label_list = folder_label_list
+        self.folder_label = None
+        self.dr_name = dr_name
 
         json_data, json_local_path = get_json_path(folder_path, json_root)
         self.dataset = read_folder(folder_path, json_data)
@@ -36,6 +38,9 @@ class VIS:
         self.__init_thumbnails()
         self.__init_grid()
         self.__reset()
+
+        if cur_label is not None:
+            self.update_label(cur_label)
 
     def __update_json_local(self):
         try:
@@ -140,14 +145,21 @@ class VIS:
 
     def update_label(self, label):
         self.folder_label = label
+        self.full_video = self.full_video_tmp.copy()
+        self.__pre_process_frame(self.full_video)
+        #cv2.putText(self.full_video, self.folder_label,
+                    #(200, 200), cv2.FONT_HERSHEY_SIMPLEX, 1,
+                    #(0, 0, 200), 3)
         print('FOLDER DIAGNOSIS:', self.folder_label)
 
     def __reset(self):
         self.button.reset()
         self.grid = self.img_matrix.copy()
         self.is_video_running = False
-        self.full_video = np.zeros((512, 512, 3), dtype=np.uint8)
-        cv2.putText(self.full_video, self.folder_label, (200, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 1)
+        self.full_video_tmp = np.zeros((720, 512, 3), dtype=np.uint8)
+        self.__pre_process_frame(self.full_video_tmp)
+        self.full_video = self.full_video_tmp.copy()
+        #cv2.putText(self.full_video, self.folder_label, (200, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 1)
 
     def __draw_rectangle(self, row, col):
         stride = self.block_size + self.margin
@@ -179,6 +191,7 @@ class VIS:
             self.frame_index = 0
 
         frame = self.imgs_data[self.video_index][self.frame_index]
+        self.full_video_tmp = frame.copy()
         self.full_video = self.__pre_process_frame(frame.copy())
         frame = self.__pre_process(frame.copy())
 
@@ -187,9 +200,15 @@ class VIS:
         self.grid[y:y+self.block_size, x:x+self.block_size] = frame
 
     def __pre_process_frame(self, full_frame):
-        cv2.putText(full_frame, self.folder_label, (100, 100),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1,
-                    (0, 0, 200), 3)
+        for i in range(len(self.folder_label_list)):
+            label = ': '.join(self.folder_label_list[i])
+            cv2.putText(full_frame, label, (30, 100+i*50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 200, 200), 3)
+
+        if self.folder_label:
+            label = self.dr_name + ': ' + self.folder_label
+            cv2.putText(full_frame, label, (30, 100+len(self.folder_label_list)*50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 200), 3)
         return full_frame
 
     def __pre_process(self, frame):
